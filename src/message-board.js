@@ -1,5 +1,7 @@
 console.log(`Message board`);
-import { createStore, combineReducers } from 'redux'
+import { createStore, combineReducers, applyMiddleware } from 'redux'
+import { get } from './http';
+import { createLogger } from 'redux-logger';
 
 export const ONLINE = `ONLINE`;
 export const AWAY = `AWAY`;
@@ -8,6 +10,9 @@ export const UPDATE_STATUS = `UPDATE_STATUS`;
 export const OFFLINE = `OFFLINE`;
 export const CREATE_NEW_MESSAGE = `CREATE_NEW_MESSAGE`;
 
+export const READY = `READY`;
+export const WAITING = `WAITING`;
+export const NEW_MESSAGE_SERVER_ACCEPTED = `NEW_MESSAGE_SERVER_ACCEPTED`;
 
 const statusUpdateAction = (value)=>{
     return {
@@ -18,6 +23,12 @@ const statusUpdateAction = (value)=>{
 
 const newMessageAction = (content, postedBy)=>{
     const date = new Date();
+
+    get('/api/create', (id) => {
+        store.dispatch({
+            type: NEW_MESSAGE_SERVER_ACCEPTED
+        })
+    });
 
     return {
         type: CREATE_NEW_MESSAGE,
@@ -44,6 +55,7 @@ const defaultState = {
         content:`Anyone got tickets to ng-conf?`
     }],
     userStatus: ONLINE,
+    apiCommunicationStatus: READY
 }
 
 
@@ -56,6 +68,18 @@ const userStatusReducer = (state = defaultState.userStatus, {type, value}) => {
     return state;
 };
 
+const apiCommunicationStatusReducer = ( state = READY, {type}) => {
+    switch (type) {
+        case CREATE_NEW_MESSAGE:
+            return WAITING;
+    
+        case NEW_MESSAGE_SERVER_ACCEPTED:
+            return READY;
+    }
+
+    return state;
+}
+
 const messagesReducer = (state = defaultState.messages, {type,value,postedBy,date})=>{
     switch (type) {
         case CREATE_NEW_MESSAGE:
@@ -67,10 +91,11 @@ const messagesReducer = (state = defaultState.messages, {type,value,postedBy,dat
 
 const combinedReducer = combineReducers({
     userStatus: userStatusReducer,
-    messages: messagesReducer
+    messages: messagesReducer,
+    apiCommunicationStatus: apiCommunicationStatusReducer
 });
 
-const store = createStore(combinedReducer);
+const store = createStore(combinedReducer, applyMiddleware(createLogger()));
 
 const render = ()=>{
     const {messages, userStatus, apiCommunicationStatus} = store.getState();
@@ -83,7 +108,7 @@ const render = ()=>{
         )).join("");
 
     document.forms.newMessage.newMessage.value = "";
-    document.forms.newMessage.fields.disabled = (userStatus === OFFLINE);
+    document.forms.newMessage.fields.disabled = (userStatus === OFFLINE || apiCommunicationStatus === WAITING);
 }
 
 document.forms.selectStatus.status.addEventListener("change",(e)=>{
@@ -100,3 +125,8 @@ document.forms.newMessage.addEventListener("submit",(e)=>{
 render();
 
 store.subscribe(render);
+
+console.log("Making request...");
+get('http://microsoft.com', (id) => {
+    console.log("Recieved callback", id);
+})
